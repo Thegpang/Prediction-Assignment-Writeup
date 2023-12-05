@@ -1,0 +1,67 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Haoming"
+date: "2023/12/6"
+output: html_document
+---
+
+## Full Analysis Workflow
+
+```{r analysis-workflow, message=FALSE}
+# Load Necessary Packages
+library(data.table)
+library(dplyr)
+library(caret)
+
+# Load the Data
+training <- tbl_df(fread("training.csv", na.strings=c('#DIV/0!', '', 'NA')))
+testing  <- tbl_df(fread("testing.csv", na.strings=c('#DIV/0!', '', 'NA')))
+
+# Split Training Data
+set.seed(1234)
+trainingDS <- createDataPartition(y = training$classe, p = 0.7, list = FALSE)
+actual.training <- training[trainingDS,]
+actual.validation <- training[-trainingDS,]
+
+# Clean Up the Variables
+nzv <- nearZeroVar(actual.training)
+actual.training <- actual.training[,-nzv]
+actual.validation <- actual.validation[,-nzv]
+
+mostlyNA <- sapply(actual.training, function(x) mean(is.na(x))) > 0.95
+actual.training <- actual.training[,mostlyNA==FALSE]
+actual.validation <- actual.validation[,mostlyNA==FALSE]
+
+actual.training <- actual.training[,-(1:5)]
+actual.validation <- actual.validation[,-(1:5)]
+
+# Model Building
+## Random Forest Model
+set.seed(1234)
+modelRF  <- train(classe ~., data = actual.training, method = "rf", trControl = trainControl(method="cv", number=3))
+
+## Generalized Boosted Model
+set.seed(1234)
+modelBM <- train(classe ~., data = actual.training, method = "gbm", trControl = trainControl(method="repeatedcv", number = 5, repeats = 1), verbose = FALSE)
+
+# Model Evaluation
+## Confusion Matrices
+prediction.validation.rf <- predict(modelRF, actual.validation)
+conf.matrix.rf <- confusionMatrix(prediction.validation.rf, actual.validation$classe)
+print(conf.matrix.rf)
+
+prediction.validation.bm <- predict(modelBM, actual.validation)
+conf.matrix.bm <- confusionMatrix(prediction.validation.bm, actual.validation$classe)
+print(conf.matrix.bm)
+
+## Summary of Generalized Boosted Model
+print(summary(modelBM))
+
+## Plots
+qplot(num_window, roll_belt, data = actual.training, col = classe)
+qplot(num_window, pitch_forearm, data = actual.training, col = classe)
+qplot(roll_belt, pitch_forearm, data = actual.training, col = classe)
+
+# Prediction on Testing Data
+prediction.testing.rf <- predict(modelRF, testing)
+print(prediction.testing.rf)
